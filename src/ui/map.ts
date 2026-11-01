@@ -51,36 +51,44 @@ export class MapView {
   private territory: SVGImageElement;
   private labels: SVGGElement;
   private legend: SVGGElement;
+  private ground: SVGGElement;
+  private pins = new Map<SVGElement, [number, number]>(); // 그림은 늘려도 점과 글자는 모양을 지킨다: 위치만 옮긴다
+  private lines: [SVGLineElement, number, number][] = [];
+  private stretch = 1; // 지도를 화면 너비에 맞추려고 가로로 늘린 배율
   private territoryKey = "";
   onClick: (id: number) => void = () => {};
 
   constructor(private svg: SVGSVGElement) {
     svg.addEventListener("click", (e) => this.tap(e));
-    svg.setAttribute("viewBox", `0 0 ${MAP_W} ${MAP_H}`);
-    svg.append(el("rect", { x: 0, y: 0, width: MAP_W, height: MAP_H, class: "sea" }));
-    svg.append(el("path", { d: pathOf(COAST), class: "land" }));
+    this.ground = el("g", {});
+    svg.append(this.ground);
+    this.ground.append(el("rect", { x: 0, y: 0, width: MAP_W, height: MAP_H, class: "sea" }));
+    this.ground.append(el("path", { d: pathOf(COAST), class: "land" }));
     // 제주
     const [jx, jy] = project(126.55, 33.38);
-    svg.append(el("ellipse", { cx: jx, cy: jy, rx: 13, ry: 8, class: "land" }));
+    this.ground.append(el("ellipse", { cx: jx, cy: jy, rx: 13, ry: 8, class: "land" }));
     // Codex로 그린 지도 그림 (해안선 기준 이미지를 바탕으로 그려 좌표가 맞는다). 없으면 위의 단색 지도가 보인다.
     const paint = el("image", { href: strategicMapImg, x: 0, y: 0, width: MAP_W, height: MAP_H, preserveAspectRatio: "none", class: "painted" });
     paint.addEventListener("error", () => paint.remove(), { once: true });
-    svg.append(paint);
+    this.ground.append(paint);
     // 세력 영역: 각 지점을 가장 가까운 지역의 세력 색으로 칠한다 (육지로 잘라냄)
     const defs = el("defs", {});
     const clip = el("clipPath", { id: "land-clip" });
     clip.append(el("path", { d: pathOf(COAST) }));
     defs.append(clip);
-    svg.append(defs);
+    this.ground.append(defs);
     this.territory = el("image", { x: 0, y: 0, width: MAP_W, height: MAP_H, preserveAspectRatio: "none", "clip-path": "url(#land-clip)", class: "territory" });
-    svg.append(this.territory);
+    this.ground.append(this.territory);
     this.labels = el("g", { class: "realm-labels" });
-    this.legend = el("g", { class: "legend", transform: `translate(${MAP_W - 118},${MAP_H - 96})` });
+    this.legend = el("g", { class: "legend" });
     // 중원 표시
     const [cx, cy] = project(114.6, 36.4);
-    const t = el("text", { x: cx + 4, y: cy, class: "map-note" });
+    const note = el("g", {});
+    const t = el("text", { class: "map-note" });
     t.textContent = "← 중원";
-    svg.append(t);
+    note.append(t);
+    this.pins.set(note, [cx + 4, cy]);
+    svg.append(note);
 
     const edges = el("g", { class: "edges" });
     for (const [a, b] of EDGE_LIST) {
@@ -88,13 +96,16 @@ export class MapView {
       const B = REGION_DEFS[b - 1];
       const [x1, y1] = project(A.lon, A.lat);
       const [x2, y2] = project(B.lon, B.lat);
-      edges.append(el("line", { x1, y1, x2, y2, class: isSea(a, b) ? "edge sea-edge" : "edge" }));
+      const line = el("line", { x1, y1, x2, y2, class: isSea(a, b) ? "edge sea-edge" : "edge" });
+      this.lines.push([line, x1, x2]);
+      edges.append(line);
     }
     svg.append(edges, this.labels, this.legend);
 
     for (const d of REGION_DEFS) {
       const [x, y] = project(d.lon, d.lat);
-      const g = el("g", { class: "node", transform: `translate(${x},${y})`, tabindex: 0, role: "button" });
+      const g = el("g", { class: "node", tabindex: 0, role: "button" });
+      this.pins.set(g, [x, y]);
       g.setAttribute("aria-label", `${d.id} ${d.name}`);
       g.append(el("circle", { r: 15, class: "hit" }));
       g.append(el("circle", { r: 10, class: "dot" }));
@@ -118,6 +129,23 @@ export class MapView {
       this.nodes.set(d.id, g);
       svg.append(g);
     }
+    this.fit();
+    new ResizeObserver(() => this.fit()).observe(svg);
+  }
+
+  // 지도를 가로로 늘려 화면을 채운다
+  private fit() {
+    const { width, height } = this.svg.getBoundingClientRect();
+    if (width && height) this.stretch = (MAP_H * width) / (height * MAP_W);
+    const k = this.stretch;
+    this.svg.setAttribute("viewBox", `0 0 ${MAP_W * k} ${MAP_H}`);
+    this.ground.setAttribute("transform", `scale(${k} 1)`);
+    this.legend.setAttribute("transform", `translate(${MAP_W * k - 118},${MAP_H - 96})`);
+    for (const [e, [x, y]] of this.pins) e.setAttribute("transform", `translate(${Math.round(x * k)},${y})`);
+    for (const [line, x1, x2] of this.lines) {
+      line.setAttribute("x1", String(x1 * k));
+      line.setAttribute("x2", String(x2 * k));
+    }
   }
 
   // 지도 전체에서 클릭을 받아 가장 가까운 지역을 고른다. 휴대폰에서는 점이 작고 촘촘해 정확히 누르기 어렵다
@@ -131,7 +159,7 @@ export class MapView {
     for (const id of pool) {
       const d = REGION_DEFS[id - 1];
       const [x, y] = project(d.lon, d.lat);
-      const dist = Math.hypot(x - p.x, y - p.y);
+      const dist = Math.hypot(x * this.stretch - p.x, y - p.y);
       if (dist <= bestD) {
         best = id;
         bestD = dist;
@@ -186,6 +214,7 @@ export class MapView {
     this.territory.setAttribute("href", canvas.toDataURL());
 
     // 나라 이름: 소유 지역들의 중심에 크게 쓴다
+    for (const g of this.labels.children) this.pins.delete(g as SVGElement);
     this.labels.replaceChildren();
     this.legend.replaceChildren();
     const alive = Object.values(s.factions).filter((f) => f.alive);
@@ -196,7 +225,9 @@ export class MapView {
         const shift: Record<string, number> = { baekje: -62, silla: 64 };
         const cx = own.reduce((a, p) => a + p[0], 0) / own.length + (shift[f.id] ?? 0);
         const cy = own.reduce((a, p) => a + p[1], 0) / own.length;
-        const g = el("g", { class: "realm", transform: `translate(${Math.round(cx)},${Math.round(cy)})` });
+        const g = el("g", { class: "realm" });
+        this.pins.set(g, [cx, Math.round(cy)]);
+        g.setAttribute("transform", `translate(${Math.round(cx * this.stretch)},${Math.round(cy)})`);
         const h = el("text", { y: -4, class: "realm-hanja", fill: FACTION_INFO[f.id].color });
         h.textContent = HANJA[f.id] ?? "";
         const k = el("text", { y: 12, class: "realm-name" });
