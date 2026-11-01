@@ -209,7 +209,7 @@ const CMD: Record<number, { name: string; hanja: string; body: string }> = {
   0: { name: "휴식", hanja: "休息", body: "이번 달 이 지역은 명령 없이 지나간다." },
   1: { name: "이동", hanja: "移動", body: "장수와 금·군량을 맞닿은 아군 지역으로 옮긴다." },
   2: { name: "수송", hanja: "輸送", body: "아군 땅으로 이어진 지역에 금과 군량을 보낸다." },
-  3: { name: "전쟁", hanja: "戰爭", body: "맞닿은 적 지역으로 출병한다. 본성을 빼앗거나 총대장을 꺾으면 이긴다." },
+  3: { name: "전쟁", hanja: "戰爭", body: "맞닿은 적 지역으로 출병한다. 본성을 빼앗거나 적을 모두 물리치면 이긴다. 총대장을 잃으면 병사 일부가 달아난다." },
   4: { name: "군사", hanja: "軍事", body: "징병·훈련·무장으로 군을 키운다. 훈련이 높을수록 전장에서 멀리 움직인다." },
   5: { name: "인재", hanja: "人才", body: "숨은 인재를 찾아 등용하거나 적 장수를 빼내 온다." },
   6: { name: "외교", hanja: "外交", body: "예물과 동맹으로 다른 나라와의 관계를 바꾼다." },
@@ -441,7 +441,7 @@ const SCENES: Record<string, Builder> = {
     if (!v) return SCENES.menu(id, c);
     const max = Math.max(v.atk.men, v.def.men, 1);
     return [cutout(id, photo(battlefieldImg(v.regionId))),
-      ...headline(`전투 · ${regionOf(c.s, v.regionId).name}`, "출진", "出陣", `${v.atk.label}의 공격, ${v.def.label}의 수비. 본성을 빼앗거나 총대장을 꺾어야 끝난다. 못 끝내면 다음 달로 이어진다.`),
+      ...headline(`전투 · ${regionOf(c.s, v.regionId).name}`, "출진", "出陣", "본성을 빼앗거나 적을 모두 물리치면 끝난다. 총대장을 잃으면 병사가 달아난다. 못 끝내면 다음 달로 이어진다."),
       bars([{ label: v.atk.label, v: v.atk.men, max, color: RED, note: `${fmt(v.atk.men)} · 장수 ${v.atk.generals}` },
         { label: v.def.label, v: v.def.men, max, color: INK, note: `${fmt(v.def.men)} · 장수 ${v.def.generals + v.def.reserve}` }], 210, 220)];
   },

@@ -18,6 +18,7 @@ import type { Arrival, FactionId, GameState, OngoingBattle, Officer, Region, Sav
 
 export const MAX_DAYS = 30;
 export const MAX_UNITS = 10;
+const DESERT_RATE = 0.2; // 총대장을 잃었을 때 남은 부대에서 달아나는 병사 비율 [설계]
 
 type SideKey = "atk" | "def";
 type Weather = "맑음" | "흐림" | "비" | "눈";
@@ -256,7 +257,6 @@ export class Battle {
     u.o.men = Math.max(0, u.o.men - Math.round(dmg));
     if (u.o.men > 0) return;
     void this.fx({ kind: "rout", from: u.hex, to: u.hex }, false);
-    const side = this.sideOf(u);
     if (u.o.id !== "__militia" && by && chance(0.7)) {
       by.captives.push(u.o);
       this.log(`${u.o.name}의 부대가 무너지고 ${u.o.name}이(가) 사로잡혔다!`);
@@ -264,7 +264,6 @@ export class Battle {
       this.log(u.o.id === "__militia" ? "수비군이 흩어졌다." : `${u.o.name}의 부대가 무너졌다. ${u.o.name}은(는) 몸만 빠져나갔다.`);
       u.gone = true;
     }
-    if (u === side.commander) this.lose(side, `총대장 ${u.o.name}의 부대가 무너졌다!`);
   }
 
   lose(side: Side, why: string) {
@@ -401,16 +400,12 @@ export class Battle {
     const roll = Math.random();
     if (roll < 0.2) {
       this.log(`${lose.o.name}이(가) 전사했다!`);
-      const side = this.sideOf(lose);
       lose.o.men = 0;
       for (const t of killOfficer(this.s, lose.o)) this.io.say(t);
-      if (lose === side.commander) this.lose(side, `총대장 ${lose.o.name}이(가) 일기토에서 쓰러졌다!`);
     } else if (roll < 0.55) {
       this.sideOf(win).captives.push(lose.o);
-      const side = this.sideOf(lose);
       lose.o.men = 0;
       this.log(`${lose.o.name}이(가) 사로잡혔다!`);
-      if (lose === side.commander) this.lose(side, `총대장 ${lose.o.name}이(가) 사로잡혔다!`);
     } else {
       this.hit(lose, lose.o.men * 0.5, this.sideOf(win));
       if (isUp(lose)) this.log(`${lose.o.name}은(는) 간신히 진으로 달아났다.`);
@@ -520,9 +515,30 @@ export class Battle {
     if (this.result) return true;
     const hq = this.unitAt(this.field.hq);
     if (hq?.side === "atk") this.lose(this.def, `${hq.o.name}이(가) 본성을 점령했다!`);
+    else if (!this.up(this.atk).length) this.lose(this.atk, `${this.atk.label}의 부대가 모두 무너졌다.`); // 양군이 다 무너지면 공격 실패
     else if (!this.up(this.def).length) this.lose(this.def, `${this.def.label}의 부대가 모두 무너졌다.`);
-    else if (!this.up(this.atk).length) this.lose(this.atk, `${this.atk.label}의 부대가 모두 무너졌다.`);
+    else {
+      this.takeCommand(this.atk);
+      this.takeCommand(this.def);
+    }
     return !!this.result;
+  }
+
+  // 총대장이 자리를 비우면 출전 중인 자국 장수가 잇는다 [설계]. 원군과 돌아선 장수는 잇지 못한다.
+  // 전장에서 무너진 경우에만 병사가 달아난다. 달 사이에 비었으면(자연사) commander가 null이다.
+  takeCommand(side: Side) {
+    const lost = side.commander;
+    if (this.result || (lost && isUp(lost))) return;
+    const pool = this.up(side).filter((u) => u.faction === side.faction && u.o.faction === side.faction);
+    const pick = pickCommander(pool.map((u) => u.o), this.s, side.faction);
+    const next = pool.find((u) => u.o === pick);
+    if (!next) return this.lose(side, `${side.label}에는 군을 이을 장수가 없다.`);
+    if (lost) {
+      for (const u of this.up(side)) u.o.men = Math.max(1, u.o.men - Math.round(u.o.men * DESERT_RATE));
+      this.log(`총대장을 잃자 ${side.label}의 병사 일부가 달아났다!`);
+    }
+    side.commander = next;
+    this.log(`${side.label}의 새 총대장은 ${next.o.name}이다.`);
   }
 
   // ── 화면 ──
@@ -592,7 +608,7 @@ export class Battle {
           return;
         }
         // 수비측은 성을 지킨다: 성 안에 있으면 나가지 않고, 비어 있는 성이 닿으면 들어간다 [설계]
-        if (this.terrain(u.hex) === "castle") return this.aiStrike(u);
+        if (this.terrain(u.hex) === "castle" && this.unitAt(hq)) return this.aiStrike(u);
         const freeCastle = this.field.castles.find((c) => !this.unitAt(c) && reach.has(c));
         if (freeCastle) {
           u.hex = freeCastle;
@@ -705,9 +721,12 @@ export class Battle {
 
     // 원군은 동맹국이 직접 움직인다
     for (const u of this.up(side).filter((x) => x.faction !== side.faction)) {
+      if (this.checkEnd()) return;
+      if (!isUp(u)) continue;
       await this.aiUnit(u);
       u.done = true;
     }
+    if (this.checkEnd()) return;
     const units = this.up(side).filter((x) => !x.done);
     for (const u of units) {
       if (this.checkEnd()) return;
@@ -861,16 +880,18 @@ export class Battle {
       // 군량: 병사 1명당 한 달(30일)에 1석
       for (const side of [this.atk, this.def]) {
         side.food = Math.max(0, side.food - Math.ceil(this.men(side) / 30));
-        if (side.food === 0) {
-          // 원작 3878:0f6a "men are deserting!" — 매일 모든 부대가 병사 5~9%를 잃는다
-          this.log(`${side.label}의 군량이 떨어져 병사들이 달아나고 있다!`);
-          for (const u of this.up(side)) this.hit(u, (u.o.men * rand(5, 9)) / 100, null);
-        }
+        if (side.food === 0) this.starve(side);
       }
       this.checkEnd();
       if (this.watch && !this.interactive) await this.io.sleep(200);
     }
     return this.result;
+  }
+
+  // 원작 3878:0f6a "men are deserting!" — 매일 모든 부대가 병사 5~9%를 잃는다. 반올림으로 끝없이 버티지 않게 최소 1명 [설계]
+  starve(side: Side) {
+    this.log(`${side.label}의 군량이 떨어져 병사들이 달아나고 있다!`);
+    for (const u of this.up(side)) this.hit(u, Math.max(1, (u.o.men * rand(5, 9)) / 100), null);
   }
 
   // 달이 바뀔 때 공격측이 물러날지 정한다. 수비측은 성을 버릴 수 없다.
@@ -925,13 +946,8 @@ export class Battle {
       side.captives = saved.captives.map((id) => s.officers[id]).filter((o) => o?.alive);
       side.food = saved.food;
       side.gold = saved.gold;
-      // 총대장이 달 사이에 죽었으면 남은 부대에서 새로 고른다
+      // 총대장이 달 사이에 죽었으면 비워 둔다. 원군이 도착한 뒤 첫 checkEnd에서 새로 고른다
       side.commander = side.units.find((u) => u.o.id === saved.commander) ?? null;
-      if (!side.commander && side.units.length) {
-        const pick = pickCommander(side.units.map((u) => u.o), s, side.faction);
-        side.commander = side.units.find((u) => u.o === pick) ?? side.units[0];
-        b.log(`${side.label}의 새 총대장은 ${side.commander.o.name}이다.`);
-      }
     }
     // 수비측 창고는 지역 창고다 (그동안 거둔 곡식이 들어 있다)
     b.def.food = b.target.food;
