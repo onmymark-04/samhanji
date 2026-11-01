@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>삼한지 三韓志</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%238c2f1f'/%3E%3Ctext x='32' y='46' font-size='40' text-anchor='middle' fill='%23f1e6cf' font-family='serif'%3E%E9%9F%93%3C/text%3E%3C/svg%3E" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@700;800&family=Nanum+Gothic+Coding:wght@400;700&family=Nanum+Myeongjo:wght@700;800&display=swap" rel="stylesheet" />
+    <script type="module" crossorigin src="/samhanji/assets/index-D_sPYOzM.js"></script>
+    <link rel="stylesheet" crossorigin href="/samhanji/assets/index-DknYipSw.css">
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand"><span class="brand-ko">삼한지</span><span class="brand-hanja">三韓志</span></div>
+        <div class="date" id="date"></div>
+      </header>
+      <main class="layout">
+        <section class="map-pane"><svg id="map" role="img" aria-label="삼국 지도"></svg><svg id="battle" role="img" aria-label="전장" hidden></svg></section>
+        <section class="side">
+          <div class="panel info" id="info"></div>
+          <div class="panel console">
+            <div class="logbox"><div class="stage" id="stage"></div><div class="log" id="log" aria-live="polite"></div></div>
+            <div class="prompt" id="prompt"></div>
+            <div class="options" id="options"></div>
+            <div class="inputrow">
+              <input id="input" inputmode="numeric" autocomplete="off" aria-label="입력" />
+              <button id="ok" class="btn primary">확인</button>
+              <button id="cancel" class="btn">취소</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
