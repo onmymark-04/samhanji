@@ -4,7 +4,7 @@
 KOEI의 『삼국지 2』(1989)의 게임 구조(월 단위 턴, 지역별 숫자 명령, 장수 능력치, 공성전)를 참고해
 **웹 네이티브로 새로 구현**했습니다. 원작의 코드·그래픽·데이터는 쓰지 않았습니다. 원작 분석은 [docs/01-rtk2-eng-analysis.md](docs/01-rtk2-eng-analysis.md)에 있습니다.
 
-**플레이: https://peterk-2026.github.io/samhanji/** (`npm run deploy`: 테스트 → `/samhanji/` 경로로 빌드 → `gh-pages` 브랜치에 올림)
+**플레이: https://onmymark-04.github.io/samhanji/** (`npm run deploy`: 테스트 → `/samhanji/` 경로로 빌드 → `gh-pages` 브랜치에 올림)
 
 ## 실행
 

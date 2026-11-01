@@ -3,8 +3,7 @@
 # (Actions 워크플로를 쓰려면 gh 토큰에 workflow 권한이 필요하다: gh auth refresh -s workflow)
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# 코드는 비공개 저장소(origin)에 두고, 공개 사이트는 PeterK-2026 저장소의 Pages로 내보낸다
-repo=$(git remote get-url peterk)
+repo=$(git remote get-url origin)
 npm test
 MSYS_NO_PATHCONV=1 BASE_PATH=/samhanji/ npm run build
 touch dist/.nojekyll
@@ -15,4 +14,4 @@ git add -A
 git commit -q -m "deploy $(git -C .. rev-parse --short HEAD)"
 git push -q -f "$repo" gh-pages
 rm -rf .git
-echo "-> https://peterk-2026.github.io/samhanji/"
+echo "-> https://onmymark-04.github.io/samhanji/"
